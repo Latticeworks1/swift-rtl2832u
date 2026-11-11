@@ -12,7 +12,7 @@ librtlsdr, no libusb, no kernel extension.
 ## Installation
 
 ```swift
-.package(url: "https://github.com/Latticeworks1/swift-rtl2832u.git", branch: "main")
+.package(url: "https://github.com/Latticeworks1/swift-rtl2832u.git", from: "0.1.0")
 ```
 
 Depend on the `RTL2832U` product.
@@ -45,6 +45,25 @@ when it must be. Unplugging the dongle ends the loop with `RadioError.disconnect
 try await radio.tune(to: 100.3e6)
 try await radio.setGain(.manual(30))
 ```
+
+## Board and options
+
+`Radio.Options` holds what belongs to the board and the connection, and is passed when the dongle is opened.
+
+```swift
+var options = Radio.Options()
+options.correctionPPM = 1.5   // error of the reference clock
+options.bandwidth = 1.2e6     // tuner filter; nil follows the sample rate
+options.biasTee = true        // power on the antenna port for an active antenna
+let radio = try await Dongle.first().open(options: options)
+```
+
+On the RTL-SDR Blog V4 the driver operates the board's signal path from the tuned frequency. A request below 28.8 MHz
+goes through the built-in upconverter and the HF input, so `tune(to: 7.1e6)` receives 7.1 MHz with no offset in the
+caller. The board's broadcast notch filters (below 2.2 MHz, 85 to 112 MHz, and 172 to 242 MHz) are switched in while
+the radio is tuned outside those bands and out while it is tuned inside them. The bias tee and the demodulator's gain
+loop also switch while a stream runs, through `setBiasTee(_:)` and `setDigitalAGC(_:)`, and closing the radio
+switches the bias tee off.
 
 ## Dongle events
 
