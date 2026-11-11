@@ -70,20 +70,27 @@ func scan() -> [Dongle] {
     var found: [Dongle] = []
     while case let service = IOIteratorNext(iterator), service != 0 {
         defer { IOObjectRelease(service) }
+        if let dongle = Dongle(service: service) { found.append(dongle) }
+    }
+    return found.sorted { $0.locationID < $1.locationID }
+}
+
+extension Dongle {
+    /// The dongle described by a USB device registry entry, or nil when the entry is another device.
+    init?(service: io_service_t) {
         let vendor: Int = property(service, "idVendor") ?? 0
         let product: Int = property(service, "idProduct") ?? 0
-        guard vendor == USBTransport.vendorID, USBTransport.productIDs.contains(product) else { continue }
+        guard vendor == USBTransport.vendorID, USBTransport.productIDs.contains(product) else { return nil }
 
         var entryID: UInt64 = 0
         IORegistryEntryGetRegistryEntryID(service, &entryID)
-        found.append(Dongle(
+        self.init(
             id: entryID,
             productID: product,
             locationID: property(service, "locationID") ?? 0,
             vendor: property(service, "USB Vendor Name") ?? "unknown vendor",
             product: property(service, "USB Product Name") ?? "RTL2832U",
             serial: property(service, "USB Serial Number") ?? "none"
-        ))
+        )
     }
-    return found.sorted { $0.locationID < $1.locationID }
 }
