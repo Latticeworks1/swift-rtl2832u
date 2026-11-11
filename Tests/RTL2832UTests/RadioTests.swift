@@ -61,7 +61,7 @@ struct RadioTests {
     func closingEndsTheSequenceWithoutAnError() async throws {
         let radio = try await Dongle.first().open()
         var count = 0
-        for try await block in try await radio.receive(frequency: 100_000_000, sampleRate: 2_400_000).samples {
+        for try await _ in try await radio.receive(frequency: 100_000_000, sampleRate: 2_400_000).samples {
             count += 1
             if count == 5 { radio.close() }
         }

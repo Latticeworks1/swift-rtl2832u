@@ -4,7 +4,7 @@
 
 import Foundation
 import IOKit
-import IOUSBHost
+@preconcurrency import IOUSBHost
 import Synchronization
 
 final class USBTransport {

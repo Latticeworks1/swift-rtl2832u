@@ -65,7 +65,7 @@ public struct Samples: AsyncSequence, Sendable {
 /// tuning generation or the sample-rate epoch changed, when blocks were withheld, when the consumer's queue discarded a
 /// block, or when the sample clock shows a loss that earlier blocks did not. A loss is detected about one queue depth
 /// of blocks after it happened, so the capture that ends at the detection already holds the blocks that followed it.
-final class CaptureRouter: @unchecked Sendable {
+final class CaptureRouter: Sendable {
     private struct State {
         var inner: AsyncThrowingStream<IQBlock, Error>.Continuation?
         var generation = 0

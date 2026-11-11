@@ -9,14 +9,7 @@ let package = Package(
         .library(name: "RTL2832U", targets: ["RTL2832U"]),
     ],
     targets: [
-        .target(
-            name: "RTL2832U",
-            swiftSettings: [.swiftLanguageMode(.v5)]
-        ),
-        .testTarget(
-            name: "RTL2832UTests",
-            dependencies: ["RTL2832U"],
-            swiftSettings: [.swiftLanguageMode(.v5)]
-        ),
+        .target(name: "RTL2832U"),
+        .testTarget(name: "RTL2832UTests", dependencies: ["RTL2832U"]),
     ]
 )
