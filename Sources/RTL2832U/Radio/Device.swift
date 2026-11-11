@@ -107,6 +107,39 @@ package final class Device: @unchecked Sendable {
         self.gain = gain
     }
 
+    /// Sets the LNA, mixer and VGA gain codes directly, each 0 to 15, for measurements of the stages one at a time.
+    /// `gain` keeps the value last given to `setGain`.
+    func setStageGain(lna: UInt8, mixer: UInt8, vga: UInt8) throws {
+        control.lock()
+        defer { control.unlock() }
+        do {
+            try tuner.setRegister(0x05, 0x10 | (lna & 0x0f), mask: 0x1f)
+            try tuner.setRegister(0x07, mixer & 0x0f, mask: 0x1f)
+            try tuner.setRegister(0x0c, vga & 0x0f, mask: 0x9f)
+        } catch { throw RadioError.wrap(error) }
+    }
+
+    /// Sets the VGA gain code, 0 to 15, under the gain mode in effect, for measurements of the VGA.
+    func setVGACode(_ code: UInt8) throws {
+        try setTunerRegister(0x0c, code & 0x0f, mask: 0x9f)
+    }
+
+    /// Writes the masked bits of one tuner register, 0x05 to 0x1f, for measurements of settings the driver holds
+    /// constant.
+    func setTunerRegister(_ register: UInt8, _ value: UInt8, mask: UInt8) throws {
+        control.lock()
+        defer { control.unlock() }
+        do { try tuner.setRegister(register, value, mask: mask) } catch { throw RadioError.wrap(error) }
+    }
+
+    /// The tuner's status registers 0x00 to 0x04. The reference driver reads the LNA gain code from the low four
+    /// bits of register 0x03 and the mixer gain code from the high four.
+    func tunerStatus() throws -> [UInt8] {
+        control.lock()
+        defer { control.unlock() }
+        do { return try tuner.status() } catch { throw RadioError.wrap(error) }
+    }
+
     /// Changes the sample rate and returns the rate the chip realizes. While streaming, blocks of the old rate stop
     /// arriving before the first block of the new rate, and the epoch increases.
     @discardableResult

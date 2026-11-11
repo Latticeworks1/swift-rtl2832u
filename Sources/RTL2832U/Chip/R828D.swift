@@ -187,7 +187,6 @@ final class R828D {
             let localOscillator = UInt32(Int(request) + intermediateHz)
 
             try setMux(localOscillator)
-            try write(0x0c, 0x08, mask: 0x9f)
             try setPLL(localOscillator)
             guard locked else { throw Failure.pllNotLocked(hz: localOscillator) }
 
@@ -361,12 +360,19 @@ final class R828D {
         try demodulator.setIntermediateFrequency(UInt32(intermediateHz))
     }
 
-    /// Enables the tuner's own gain control.
+    /// The VGA gain code in effect, 0 to 15. The gain functions set it and a retune leaves it alone.
+    var vgaCode: UInt8 { shadow[0x0c - Self.registerBase] & 0x0f }
+
+    /// The VGA code written under both gain modes. Using one code in both modes keeps the level independent of the
+    /// order in which gain and tuning calls were made.
+    static let defaultVGACode: UInt8 = 0x08
+
+    /// Enables the tuner's own gain control for the LNA and the mixer, with the VGA at a fixed code.
     func setAutomaticGain() throws {
         try transport.withRepeater {
             try write(0x05, 0x00, mask: 0x10)
             try write(0x07, 0x10, mask: 0x10)
-            try write(0x0c, 0x0b, mask: 0x9f)
+            try write(0x0c, Self.defaultVGACode, mask: 0x9f)
         }
     }
 
@@ -377,7 +383,7 @@ final class R828D {
             try write(0x05, 0x10, mask: 0x10)
             try write(0x07, 0x00, mask: 0x10)
             _ = try read(count: 4)
-            try write(0x0c, 0x08, mask: 0x9f)
+            try write(0x0c, Self.defaultVGACode, mask: 0x9f)
 
             var total = 0, mixer = 0, lna = 0
             for _ in 0..<15 {
@@ -391,6 +397,12 @@ final class R828D {
             try write(0x05, UInt8(lna), mask: 0x0f)
             try write(0x07, UInt8(mixer), mask: 0x0f)
         }
+    }
+
+    /// Writes the masked bits of one tuner register, 0x05 to 0x1f, for measurements of settings the driver holds
+    /// constant.
+    func setRegister(_ register: UInt8, _ value: UInt8, mask: UInt8) throws {
+        try transport.withRepeater { try write(register, value, mask: mask) }
     }
 
     /// Status register 0x00 to 0x04 as the tuner reports it, for diagnostics.

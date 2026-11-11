@@ -68,6 +68,24 @@ struct RadioTests {
         #expect(count >= 5)
     }
 
+    @Test(.enabled(if: RadioTests.hasDongle), .timeLimit(.minutes(1)))
+    func theVGACodeIsTheSameAcrossGainModesAndRetunes() throws {
+        let device = try Device(dongle: try Dongle.first(), gain: .automatic, options: Radio.Options())
+        defer { device.close() }
+        #expect(device.tuner.vgaCode == R828D.defaultVGACode)
+        try device.setCenterFrequency(101_000_000)
+        #expect(device.tuner.vgaCode == R828D.defaultVGACode)
+
+        try device.setGain(.manual(20))
+        #expect(device.tuner.vgaCode == R828D.defaultVGACode)
+        try device.setCenterFrequency(433_920_000)
+        #expect(device.tuner.vgaCode == R828D.defaultVGACode)
+
+        try device.setGain(.automatic)
+        try device.setCenterFrequency(100_000_000)
+        #expect(device.tuner.vgaCode == R828D.defaultVGACode)
+    }
+
     private func open(_ frequency: Double = 100_000_000) async throws -> Radio {
         try await Dongle.first().open()
     }
