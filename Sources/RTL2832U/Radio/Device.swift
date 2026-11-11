@@ -237,7 +237,7 @@ package final class Device: @unchecked Sendable {
         }
     }
 
-    private static let terminationGrace = 0.25
+    private static let terminationGrace = 1.0
 
     private func detached() {
         onDetach?()
