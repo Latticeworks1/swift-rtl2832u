@@ -8,7 +8,7 @@ import Testing
 /// leaves the LNA and the mixer to the tuner's own control, and any further columns are tuner register writes as
 /// hexadecimal `register:value:mask`; each capture is written to
 /// `STAGE_GAIN_OUTPUT/<line number>_<label>.f32` as the I samples followed by the Q samples, 32-bit floats at full
-/// scale 1. `status.txt` in the same folder holds the tuner's five status registers read before and after each capture.
+/// scale 1 about the mean of each channel over the capture. `status.txt` in the same folder holds the tuner's five status registers read before and after each capture.
 @Suite(.serialized)
 struct StageGainSweepTests {
 
@@ -22,9 +22,15 @@ struct StageGainSweepTests {
         ProcessInfo.processInfo.environment["STAGE_GAIN_SETTLE"].flatMap(Double.init) ?? 0.4
 
     private struct CollectorState {
-        var i: [Float] = []
-        var q: [Float] = []
+        var i: [UInt8] = []
+        var q: [UInt8] = []
         var wanted = 0
+    }
+
+    /// The channels as 32-bit floats at full scale 1 about each channel's own mean.
+    private static func zeroMeanFloats(_ bytes: [UInt8]) -> [Float] {
+        let mean = bytes.reduce(0.0) { $0 + Double($1) } / Double(max(bytes.count, 1))
+        return bytes.map { Float((Double($0) - mean) / 127.5) }
     }
 
     private final class Collector: Sendable {
@@ -42,13 +48,15 @@ struct StageGainSweepTests {
             guard block.acquisition.tuningSettled, block.acquisition.transferComplete else { return }
             state.withLock {
                 guard $0.i.count < $0.wanted else { return }
-                $0.i.append(contentsOf: UnsafeBufferPointer(start: block.i, count: block.count))
-                $0.q.append(contentsOf: UnsafeBufferPointer(start: block.q, count: block.count))
+                for k in 0..<block.count {
+                    $0.i.append(block.bytes[2 * k])
+                    $0.q.append(block.bytes[2 * k + 1])
+                }
             }
         }
 
         /// The samples once the armed count has arrived, or nil while they are still being collected.
-        func take() -> (i: [Float], q: [Float])? {
+        func take() -> (i: [UInt8], q: [UInt8])? {
             state.withLock { $0.i.count >= $0.wanted && $0.wanted > 0 ? ($0.i, $0.q) : nil }
         }
     }
@@ -88,13 +96,13 @@ struct StageGainSweepTests {
             try await Task.sleep(for: .seconds(Self.settleSeconds))
             let before = try device.tunerStatus()
             collector.arm(Self.samplesPerPoint)
-            var samples: (i: [Float], q: [Float])?
+            var samples: (i: [UInt8], q: [UInt8])?
             while samples == nil {
                 try await Task.sleep(for: .milliseconds(20))
                 samples = collector.take()
             }
-            var data = samples!.i.withUnsafeBufferPointer { Data(buffer: $0) }
-            samples!.q.withUnsafeBufferPointer { data.append(Data(buffer: $0)) }
+            var data = Self.zeroMeanFloats(samples!.i).withUnsafeBufferPointer { Data(buffer: $0) }
+            Self.zeroMeanFloats(samples!.q).withUnsafeBufferPointer { data.append(Data(buffer: $0)) }
             try data.write(to: output.appendingPathComponent(String(format: "%04d_%@.f32", index, line[0])))
             let after = try device.tunerStatus()
             let hex = { (bytes: [UInt8]) in bytes.map { String(format: "%02x", $0) }.joined() }

@@ -20,7 +20,7 @@ struct RadioTests {
             #expect(abs(capture.sampleRate - 2_400_000) < 1)
             for try await block in capture {
                 samples += block.count
-                peak = max(peak, block.i.map(abs).max() ?? 0, block.q.map(abs).max() ?? 0)
+                peak = max(peak, block.bytes.map { abs(Float($0) - 127.5) / 127.5 }.max() ?? 0)
                 if samples >= 4_800_000 { break }
             }
             break

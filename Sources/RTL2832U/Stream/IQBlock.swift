@@ -29,7 +29,7 @@ public struct IQAcquisition: Sendable, Equatable {
     }
 }
 
-/// A block of complex baseband samples, owned by the receiver of the block.
+/// A block of complex baseband samples in the converter's own format, owned by the receiver of the block.
 public struct IQBlock: Sendable {
     /// What the driver recorded about how the block was acquired. A program that reads blocks from a `Capture` has no
     /// need for it, because the driver has already withheld damaged blocks and ended the capture at every break.
@@ -49,10 +49,10 @@ public struct IQBlock: Sendable {
         }
     }
 
-    /// In-phase samples, scaled so that full scale is 1.
-    public let i: [Float]
-    /// Quadrature samples, the same length as `i`.
-    public let q: [Float]
+    /// The samples as the converter produced them: for each complex sample, one unsigned 8-bit in-phase byte followed
+    /// by one unsigned 8-bit quadrature byte. The bytes of each channel center near 127.5, and a deviation of 127.5
+    /// from the center is the converter's full scale.
+    public let bytes: [UInt8]
     /// The rate these samples were captured at, in samples per second.
     public let sampleRate: Double
     /// The center frequency in hertz, or nil from a source that does not know it.
@@ -61,11 +61,10 @@ public struct IQBlock: Sendable {
     public let diagnostics: Diagnostics
 
     /// The number of complex samples in the block.
-    public var count: Int { i.count }
+    public var count: Int { bytes.count / 2 }
 
-    public init(i: [Float], q: [Float], sampleRate: Double, frequency: Double?, diagnostics: Diagnostics) {
-        self.i = i
-        self.q = q
+    public init(bytes: [UInt8], sampleRate: Double, frequency: Double?, diagnostics: Diagnostics) {
+        self.bytes = bytes
         self.sampleRate = sampleRate
         self.frequency = frequency
         self.diagnostics = diagnostics

@@ -20,8 +20,6 @@ public actor Radio {
         public var correctionPPM = 0.0
         /// The tuner's filter bandwidth in hertz, or nil to match the sample rate.
         public var bandwidth: Double?
-        /// Mirrors the spectrum about the tuner's center by negating Q.
-        public var invertIQ = false
         /// Powers the antenna port for an active antenna. Switched off again when the radio closes.
         public var biasTee = false
         /// The demodulator's gain loop after the ADC, separate from the tuner's own gain.

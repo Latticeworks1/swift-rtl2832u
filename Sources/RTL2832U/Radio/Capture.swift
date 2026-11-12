@@ -106,8 +106,7 @@ final class CaptureRouter: Sendable {
             }
             state.sequence &+= 1
             let owned = IQBlock(
-                i: Array(UnsafeBufferPointer(start: block.i, count: block.count)),
-                q: Array(UnsafeBufferPointer(start: block.q, count: block.count)),
+                bytes: Array(block.bytes.prefix(block.count * 2)),
                 sampleRate: block.sampleRate, frequency: acquisition.centerHz.map(Double.init),
                 diagnostics: IQBlock.Diagnostics(epoch: block.epoch, sequence: state.sequence,
                                                  acquisition: acquisition))

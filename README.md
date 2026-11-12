@@ -43,7 +43,7 @@ let captures = try await radio.receive(frequency: 100.1e6, sampleRate: 2.4e6, ga
 for try await capture in captures {
     var demodulator = FMDemodulator()          // your state for one contiguous run
     for try await block in capture {
-        demodulator.process(block.i, block.q)  // zero-mean Float samples, full scale 1
+        demodulator.process(block.bytes)       // interleaved unsigned 8-bit I and Q
     }
 }
 ```
@@ -68,10 +68,13 @@ struct FMAudio {
     private var lastI: Float = 0, lastQ: Float = 0
     private var sumPhase: Float = 0, phases = 0, level: Float = 0
 
-    mutating func process(_ i: [Float], _ q: [Float]) -> [Float] {
+    mutating func process(_ bytes: [UInt8]) -> [Float] {
         var audio: [Float] = []
-        for k in i.indices {
-            sumI += i[k]; sumQ += q[k]; count += 1
+        for k in 0..<bytes.count / 2 {
+            // The converter's bytes center on 127.5, and a deviation of 127.5 is full scale.
+            sumI += (Float(bytes[2 * k]) - 127.5) / 127.5
+            sumQ += (Float(bytes[2 * k + 1]) - 127.5) / 127.5
+            count += 1
             guard count == 10 else { continue }
             // The angle between successive samples is the instantaneous frequency.
             sumPhase += atan2(sumQ * lastI - sumI * lastQ, sumI * lastI + sumQ * lastQ)
@@ -111,7 +114,7 @@ let radio = try await Dongle.first().open()
 for try await capture in try await radio.receive(frequency: 100.1e6, sampleRate: 2.4e6) {
     var fm = FMAudio()
     for try await block in capture {
-        play(fm.process(block.i, block.q))
+        play(fm.process(block.bytes))
     }
 }
 ```
@@ -160,9 +163,12 @@ for Accelerate and Apple silicon and chosen by the library for the signal at han
 
 ## Samples, rates and loss
 
-Each `IQBlock` holds `i` and `q` as `Float` arrays with zero mean, scaled so that the converter's full scale is 1.
-Levels are therefore relative to the 8-bit converter at the gain in effect. Blocks within a capture are contiguous,
-so time within a capture follows from the sample count and `sampleRate`.
+Each `IQBlock` holds `bytes`, the samples as the converter produced them: for each complex sample one unsigned 8-bit
+in-phase byte followed by one unsigned 8-bit quadrature byte. The bytes of a channel center near 127.5, and a deviation
+of 127.5 from the center is the converter's full scale, so levels are relative to the 8-bit converter at the gain in
+effect. Whether to remove the offset, how fast it may drift, and whether to mirror the spectrum are decisions of the
+program that reads the bytes. Blocks within a capture are contiguous, so time within a capture follows from the
+sample count and `sampleRate`.
 
 The resampler realizes rates above 225 kS/s up to 300 kS/s and above 900 kS/s up to 3.2 MS/s.
 `Radio.supports(sampleRate:)` tests a rate, `radio.sampleRate` reports the rate the chip realized, which differs

@@ -1,8 +1,7 @@
 // Sustained I/Q acquisition with a sample rate that can change while samples are flowing. A rate change stops the
 // queued requests, waits for the last handler to return, retunes the baseband, the tuner filter and the local
-// oscillator, clears the converter's offset estimate, flushes the dongle's FIFO and starts a new stream. Every block
-// carries the rate it was captured at and an epoch that increases with each reconfiguration, so downstream state can
-// be reset at the boundary.
+// oscillator, flushes the dongle's FIFO and starts a new stream. Every block carries the rate it was captured at and
+// an epoch that increases with each reconfiguration, so downstream state can be reset at the boundary.
 
 import Foundation
 import Dispatch
@@ -11,18 +10,18 @@ package final class IQStream: @unchecked Sendable {
 
     /// Valid only for the duration of the handler call.
     package struct Block {
-        package let i: UnsafePointer<Float>
-        package let q: UnsafePointer<Float>
-        package let count: Int
+        /// The transfer's bytes, an unsigned 8-bit in-phase byte then an unsigned 8-bit quadrature byte per sample.
+        package let bytes: UnsafeRawBufferPointer
         package let sampleRate: Double
         package let epoch: Int
         package var acquisition = IQAcquisition()
 
-        package init(i: UnsafePointer<Float>, q: UnsafePointer<Float>, count: Int, sampleRate: Double, epoch: Int,
+        /// The complex samples in the block. A trailing unpaired byte is not a sample.
+        package var count: Int { bytes.count / 2 }
+
+        package init(bytes: UnsafeRawBufferPointer, sampleRate: Double, epoch: Int,
                      acquisition: IQAcquisition = IQAcquisition()) {
-            self.i = i
-            self.q = q
-            self.count = count
+            self.bytes = bytes
             self.sampleRate = sampleRate
             self.epoch = epoch
             self.acquisition = acquisition
@@ -43,11 +42,9 @@ package final class IQStream: @unchecked Sendable {
 
     static let blockSeconds = 0.02
     static let queueDepth = 8
-    private static let maxBlockSamples = 65_536
 
     private let demodulator: Demodulator
     private let tuner: R828D
-    private let converter: IQConverter
     private var handler: (@Sendable (Block) -> Void)?
     private var discardNext = false
     private var tracker: AcquisitionTracker?
@@ -60,11 +57,9 @@ package final class IQStream: @unchecked Sendable {
     private(set) var centerHz: UInt32 = 0
     private(set) var epoch = 0
 
-    init(demodulator: Demodulator, tuner: R828D, spectrumInverted: Bool = false) {
+    init(demodulator: Demodulator, tuner: R828D) {
         self.demodulator = demodulator
         self.tuner = tuner
-        converter = IQConverter(capacity: Self.maxBlockSamples, sampleRate: 1, timeConstant: 1)
-        converter.spectrumInverted = spectrumInverted
     }
 
     /// Bytes per request: about `blockSeconds` of samples, rounded to whole 512-byte bulk packets.
@@ -126,8 +121,6 @@ package final class IQStream: @unchecked Sendable {
             throw error
         }
         tracker?.endRetune(to: centerHz, success: true, at: DispatchTime.now().uptimeNanoseconds)
-        converter.sampleRate = sampleRate
-        converter.reset()
         epoch += 1
     }
 
@@ -152,10 +145,9 @@ package final class IQStream: @unchecked Sendable {
                                   requestedBytes: requestedBytes, receivedBytes: raw.count)
             return
         }
-        let n = converter.convert(raw)
-        let acquisition = tracker?.classify(completedNs: completed, samples: n, rate: sampleRate,
+        let acquisition = tracker?.classify(completedNs: completed, samples: raw.count / 2, rate: sampleRate,
                                             requestedBytes: requestedBytes, receivedBytes: raw.count)
-        handler?(Block(i: converter.i, q: converter.q, count: n, sampleRate: sampleRate, epoch: epoch,
+        handler?(Block(bytes: raw, sampleRate: sampleRate, epoch: epoch,
                        acquisition: acquisition ?? IQAcquisition()))
     }
 }

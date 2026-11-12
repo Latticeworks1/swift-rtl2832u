@@ -24,7 +24,7 @@ let captures = try await radio.receive(frequency: 100.1e6, sampleRate: 2.4e6, ga
 for try await capture in captures {
     var demodulator = Demodulator()            // state for one contiguous run
     for try await block in capture {
-        demodulator.process(block.i, block.q)
+        demodulator.process(block.bytes)
     }
 }
 ```
@@ -54,13 +54,13 @@ try await radio.setGain(.manual(30))
 
 `Dongle.events` is an `AsyncStream<DongleEvent>`. It yields `.connected(Dongle)` for each dongle already on the bus and then for each arrival, and `.disconnected(id:)` when a dongle that was reported as connected leaves, where the ID is the `Dongle.id` it had. The stream is driven by IOKit matching notifications on the USB device class, so the driver observes arrivals and departures itself, with no radio open and no application running. It reads the same descriptor strings as `Dongle.all` and opens no device. Stopping iteration releases the notification port.
 
-`Radio` is an actor. `Radio.Options` holds what belongs to the board and the connection: the board profile, the reference clock and its correction in parts per million, the tuner bandwidth, spectrum inversion, the bias tee and the demodulator's gain loop. Its read-only properties are `sampleRate`, the rate the chip actually realizes, `frequency`, and `gain`. `close()` is synchronous and returns at once. The release of the dongle completes in the background, and a later open of the same dongle waits for that release.
+`Radio` is an actor. `Radio.Options` holds what belongs to the board and the connection: the board profile, the reference clock and its correction in parts per million, the tuner bandwidth, the bias tee and the demodulator's gain loop. Its read-only properties are `sampleRate`, the rate the chip actually realizes, `frequency`, and `gain`. `close()` is synchronous and returns at once. The release of the dongle completes in the background, and a later open of the same dongle waits for that release.
 
 `Captures` is the sequence of captures returned by `receive(frequency:sampleRate:gain:)`, and one task should iterate it. Its `samples` property is the flat sequence of blocks across all captures. A `Capture` carries the `frequency` and `sampleRate` of every block in it.
 
 Frequencies and rates are `Double` hertz. Gain is `.automatic`, which hands the gain to the tuner's own control loop, or `.manual(Double)` in decibels, which the driver realizes with the tuner's discrete LNA and mixer steps.
 
-`IQBlock` carries `i` and `q` as arrays of `Float` with zero mean and full scale 1, the `sampleRate`, and the capture's `frequency`. The sequence number and the acquisition record stay available through a separate `IQBlock.Diagnostics` value for tools and tests, and the ordinary path does not require them.
+`IQBlock` carries `bytes`, the interleaved unsigned 8-bit in-phase and quadrature samples exactly as the converter delivered them, the `sampleRate`, and the capture's `frequency`. The driver decides what it can know only at the transfer, which blocks are damaged and where a capture ends, and leaves the numeric interpretation of the bytes, such as offset removal and scaling, to the program. The sequence number and the acquisition record stay available through a separate `IQBlock.Diagnostics` value for tools and tests, and the ordinary path does not require them.
 
 `RadioError` is one error type with cases for no device found, several dongles sharing a serial, a device claimed elsewhere, removal, a transfer failure, a PLL that did not lock, a frequency or sample rate the chip cannot realize, a register access that failed, and a closed radio. It conforms to `LocalizedError`.
 

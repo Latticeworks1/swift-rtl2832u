@@ -25,7 +25,6 @@ package final class Device: @unchecked Sendable {
     package private(set) var gain: Gain
 
     private let control = NSLock()
-    private let invertIQ: Bool
     private let bandwidthHz: UInt32?
     private var requestedRate: UInt32
     private var biasTee: Bool
@@ -38,7 +37,6 @@ package final class Device: @unchecked Sendable {
         do {
             transport = try USBTransport(entryID: dongle.id)
             demodulator = Demodulator(transport, correctionPPM: options.correctionPPM)
-            invertIQ = options.invertIQ
             bandwidthHz = options.bandwidthHz
             requestedRate = sampleRate
             centerFrequency = frequency
@@ -188,7 +186,7 @@ package final class Device: @unchecked Sendable {
         guard isConnected else { throw RadioError.disconnected }
         if let centerHz { centerFrequency = centerHz }
 
-        let stream = IQStream(demodulator: demodulator, tuner: tuner, spectrumInverted: invertIQ)
+        let stream = IQStream(demodulator: demodulator, tuner: tuner)
         stream.onFailure = { [weak self] code in self?.transferFailed(code) }
         do {
             try stream.start(sampleRate: requestedRate, centerHz: centerFrequency, handler: handler)

@@ -11,22 +11,20 @@ struct CaptureRouterTests {
     private struct Seen {
         var frequency: Double
         var sampleRate: Double
-        var values: [Float]
+        var values: [UInt8]
     }
 
-    private func feed(_ router: CaptureRouter, _ value: Float, generation: Int = 0, epoch: Int = 1,
+    /// Feeds a block of four samples whose bytes all equal `value`, which tells the blocks apart.
+    private func feed(_ router: CaptureRouter, _ value: UInt8, generation: Int = 0, epoch: Int = 1,
                       centerHz: UInt32 = 100_000_000, rate: Double = 2_400_000, settled: Bool = true,
                       complete: Bool = true, shortfall: Int = 0) {
-        let i = [Float](repeating: value, count: 4)
-        let q = [Float](repeating: -value, count: 4)
-        i.withUnsafeBufferPointer { ip in
-            q.withUnsafeBufferPointer { qp in
-                router.accept(IQStream.Block(
-                    i: ip.baseAddress!, q: qp.baseAddress!, count: 4, sampleRate: rate, epoch: epoch,
-                    acquisition: IQAcquisition(tuningGeneration: generation, centerHz: centerHz,
-                                               transferComplete: complete, tuningSettled: settled,
-                                               clockShortfallSamples: shortfall)))
-            }
+        let bytes = [UInt8](repeating: value, count: 8)
+        bytes.withUnsafeBytes { raw in
+            router.accept(IQStream.Block(
+                bytes: raw, sampleRate: rate, epoch: epoch,
+                acquisition: IQAcquisition(tuningGeneration: generation, centerHz: centerHz,
+                                           transferComplete: complete, tuningSettled: settled,
+                                           clockShortfallSamples: shortfall)))
         }
     }
 
@@ -34,7 +32,7 @@ struct CaptureRouterTests {
         var result: [Seen] = []
         for try await capture in router.captures {
             var seen = Seen(frequency: capture.frequency, sampleRate: capture.sampleRate, values: [])
-            for try await block in capture { seen.values.append(block.i[0]) }
+            for try await block in capture { seen.values.append(block.bytes[0]) }
             result.append(seen)
         }
         return result
@@ -42,7 +40,7 @@ struct CaptureRouterTests {
 
     @Test func aCleanStreamIsOneCapture() async throws {
         let router = CaptureRouter()
-        for value in 1...6 { feed(router, Float(value)) }
+        for value in 1...6 { feed(router, UInt8(value)) }
         router.finish()
         let captures = try await collect(router)
         #expect(captures.count == 1)
@@ -110,7 +108,7 @@ struct CaptureRouterTests {
 
     @Test func aConsumerThatFallsBehindGetsANewCaptureAndNeverSeesAGapInsideOne() async throws {
         let router = CaptureRouter(buffering: 2)
-        for value in 1...6 { feed(router, Float(value)) }
+        for value in 1...6 { feed(router, UInt8(value)) }
         router.finish()
         let captures = try await collect(router)
         // The queue keeps the newest two blocks, so each capture holds consecutive blocks and the discarded ones
@@ -139,8 +137,8 @@ struct CaptureRouterTests {
         feed(router, 2, generation: 1, centerHz: 101_000_000)
         feed(router, 3, generation: 1, centerHz: 101_000_000)
         router.finish()
-        var values: [Float] = []
-        for try await block in Samples(captures: router.captures) { values.append(block.i[0]) }
+        var values: [UInt8] = []
+        for try await block in Samples(captures: router.captures) { values.append(block.bytes[0]) }
         #expect(values == [1, 2, 3])
     }
 
